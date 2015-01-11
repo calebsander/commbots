@@ -12,11 +12,28 @@ typedef enum { //define constants to make joystick usage easier to understand
 	lx = 3
 } joystickChannel;
 
-task main() {
+#pragma competitionControl(Competition)
+#pragma autonomousDuration(15)
+#pragma userControlDuration(105)
+
+#include "Vex_Competition_Includes.c"
+
+void pre_auton() {}
+
+task autonomous() {
+	motor[left] = -128;
+	motor[right] = 127;
+	wait1Msec(500);
+	motor[left] = 0;
+	motor[right] = 0;
+}
+
+task usercontrol() {
 	sbyte yj, sj; //forward and spin movement variables
+	short lpower, rpower, maxpower;
 	sbyte aj, cj; //arm and claw movement variables
 	bool lastBtn6D = false; //whether or not the right lower button was pressed the last loop cycle
-	bool closed = false; //whether the claw should be closed
+
 	while (true) { //infinite loop
 		if (abs(vexRT[ry]) > 10) yj = vexRT[ry]; //if moving the joystick a significant amount, set the desired movement
 		else yj = 0; //otherwise, set the movement to 0
@@ -24,24 +41,29 @@ task main() {
 		else sj = 0;
 
 		if (abs(vexRT[ly]) > 10) aj = vexRT[ly];
-		else aj = 10; //to make the arm fall slower
+		else if (SensorValue[armSensor] > 1970) aj = 10; //to make the arm fall slower
+		else aj = -10;
 
 		if (vexRT[Btn6D] && !lastBtn6D) { //if pressing the right lower button after it has been unpressed
-			closed = !closed; //toggle the state of the claw
 			lastBtn6D = true; //to prevent toggling multiple times
 			clearTimer(T1); //to time the closing of the claw
 		}
 		if (!vexRT[Btn6D]) lastBtn6D = false; //if no longer pressing the button, allow it to be toggled again
-		if (time1[T1] < 500) { //if in the first 500 milliseconds after closing
-			if (closed) cj = 64; //if trying to close the claw, close it
-			else cj = -64; //if trying to open the claw, open it
-		}
-		else if (vexRT[Btn8D]) cj = 64; //if holding the claw closed, close it
+		if (time1[T1] < 500) cj = -64; //if in the first 500 milliseconds after opening the claw, open it
+		else if (vexRT[Btn6U]) cj = 127; //if holding the claw closed, close it
 		else cj = 0; //if claw has not recently been toggled, don't move it
 
 		//APPLY MOTOR POWERS
-		motor[left] =   yj + sj;
-		motor[right] = -yj + sj;
+		lpower =  (short)yj + (short)sj;
+		rpower = -(short)yj + (short)sj;
+		if (abs(lpower) > abs(rpower)) maxpower = abs(lpower);
+		else maxpower = abs(rpower);
+		if (maxpower > 128) {
+			lpower = lpower * 128 / maxpower;
+			rpower = rpower * 128 / maxpower;
+		}
+		motor[left] =  lpower;
+		motor[right] = rpower;
 		motor[arm] = -aj;
 		motor[claw] = cj;
 
